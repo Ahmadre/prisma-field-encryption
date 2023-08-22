@@ -8,8 +8,7 @@ export function fieldEncryptionExtension<
   Models extends string = any,
   Actions extends string = any
 >(config: Configuration = {}) {
-  const keys = configureKeys(config)
-  debug.setup('Keys: %O', keys)
+  configureKeys(config).then(_ => debug.setup('--- initialized keys ---'))
   const models = analyseDMMF(
     config.dmmf ?? require('@prisma/client').Prisma.dmmf
   )
@@ -36,14 +35,9 @@ export function fieldEncryptionExtension<
             dataPath: [],
             runInTransaction: false
           }
-          const encryptedParams = encryptOnWrite(
-            params,
-            keys,
-            models,
-            operation
-          )
+          const encryptedParams = encryptOnWrite(params, models, operation)
           let result = await query(encryptedParams.args)
-          decryptOnRead(encryptedParams, result, keys, models, operation)
+          decryptOnRead(encryptedParams, result, models, operation)
           return result
         }
       }

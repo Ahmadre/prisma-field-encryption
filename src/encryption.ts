@@ -1,13 +1,4 @@
-import {
-  cloakedStringRegex,
-  CloakKeychain,
-  decryptStringSync,
-  encryptStringSync,
-  findKeyForMessage,
-  makeKeychainSync,
-  ParsedCloakKey,
-  parseKeySync
-} from '@47ng/cloak'
+import { KeyManagementServiceClient } from '@google-cloud/kms'
 import { Draft, produce } from 'immer'
 import objectPath from 'object-path'
 import { debug } from './debugger'
@@ -18,34 +9,34 @@ import type { Configuration, MiddlewareParams } from './types'
 import { visitInputTargetFields, visitOutputTargetFields } from './visitor'
 
 export interface KeysConfiguration {
-  encryptionKey: ParsedCloakKey
-  keychain: CloakKeychain
+  client: KeyManagementServiceClient
 }
 
-export function configureKeys(config: Configuration): KeysConfiguration {
-  const encryptionKey =
-    config.encryptionKey || process.env.PRISMA_FIELD_ENCRYPTION_KEY
+const projectId = 'atemwegsliga-dev'
+const locationId = 'global'
+const keyRing = 'atemwegsliga-dev-ring'
+const client = new KeyManagementServiceClient({
+  projectId,
+  credentials: {
+    client_email: process.env.KMS_CLIENT_EMAIL,
+    private_key: process.env.KMS_PRIVATE_KEY
+  }
+})
+
+export async function configureKeys(
+  config: Configuration
+): Promise<KeysConfiguration> {
+  const keyRingPath = client.keyRingPath(projectId, locationId, keyRing)
+  const encryptionKey = await client.getCryptoKey({
+    name: keyRingPath
+  })
 
   if (!encryptionKey) {
     throw new Error(errors.noEncryptionKey)
   }
 
-  const decryptionKeysFromEnv = (process.env.PRISMA_FIELD_DECRYPTION_KEYS ?? '')
-    .split(',')
-    .filter(Boolean)
-
-  const decryptionKeys: string[] = Array.from(
-    new Set([
-      encryptionKey,
-      ...(config.decryptionKeys ?? decryptionKeysFromEnv)
-    ])
-  )
-
-  const keychain = makeKeychainSync(decryptionKeys)
-
   return {
-    encryptionKey: parseKeySync(encryptionKey),
-    keychain
+    client
   }
 }
 
@@ -53,7 +44,6 @@ export function configureKeys(config: Configuration): KeysConfiguration {
 
 export function encryptOnWrite<Models extends string, Actions extends string>(
   params: MiddlewareParams<Models, Actions>,
-  keys: KeysConfiguration,
   models: DMMFModels,
   operation: string
 ) {
@@ -104,7 +94,7 @@ export function encryptOnWrite<Models extends string, Actions extends string>(
             return
           }
           try {
-            const cipherText = encryptStringSync(clearText, keys.encryptionKey)
+            const cipherText = client.encrypt({ plaintext: clearText })
             objectPath.set(draft.args, path, cipherText)
             debug.encryption(`Encrypted ${model}.${field} at path \`${path}\``)
             if (fieldConfig.hash) {
@@ -138,7 +128,6 @@ export function encryptOnWrite<Models extends string, Actions extends string>(
 export function decryptOnRead<Models extends string, Actions extends string>(
   params: MiddlewareParams<Models, Actions>,
   result: any,
-  keys: KeysConfiguration,
   models: DMMFModels,
   operation: string
 ) {
@@ -176,15 +165,9 @@ export function decryptOnRead<Models extends string, Actions extends string>(
       field
     }) {
       try {
-        if (!cloakedStringRegex.test(cipherText)) {
-          return
-        }
-        const decryptionKey = findKeyForMessage(cipherText, keys.keychain)
-        const clearText = decryptStringSync(cipherText, decryptionKey)
+        const clearText = client.decrypt({ ciphertext: cipherText })
         objectPath.set(result, path, clearText)
-        debug.decryption(
-          `Decrypted ${model}.${field} at path \`${path}\` using key fingerprint ${decryptionKey.fingerprint}`
-        )
+        debug.decryption(`Decrypted ${model}.${field} at path \`${path}\``)
       } catch (error) {
         const message = errors.fieldDecryptionError(model, field, path, error)
         if (fieldConfig.strictDecryption) {
