@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/47ng/prisma-field-encryption"
+    "url": "https://github.com/Ahmadre/prisma-field-encryption"
   },
   "keywords": [
     "prisma",
@@ -23,9 +23,6 @@
     "encryption",
     "aes-256-gcm"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "clean": "rm -rf ./dist ./coverage",
     "prebuild": "run-s generate:prisma",
@@ -45,7 +42,6 @@
     "migrate": "ts-node ./src/tests/migrate.ts"
   },
   "dependencies": {
-    "@47ng/cloak": "^1.1.0",
     "@google-cloud/kms": "^4.0.0",
     "@prisma/generator-helper": "^5.0.0",
     "debug": "^4.3.4",
