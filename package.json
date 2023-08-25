@@ -42,6 +42,7 @@
     "migrate": "ts-node ./src/tests/migrate.ts"
   },
   "dependencies": {
+    "@47ng/cloak": "^1.1.0",
     "@google-cloud/kms": "^4.0.0",
     "@prisma/generator-helper": "^5.0.0",
     "debug": "^4.3.4",
